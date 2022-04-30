@@ -13,12 +13,18 @@ from points3d import get_neighbor_spatial_grid_local_self
 from points3d import get_neighbor_spatial_grid_radius_v_voting
 
 parser = argparse.ArgumentParser(description='Point-based Shape Generation')
-parser.add_argument('config', type=str, metavar='N', help='config json file')
-parser.add_argument('--test', action='store_true', help='forward the test data(inference)')
+parser.add_argument('--config', type=str, help='config json file', default='Pretrained/Config_d7_1p_pretrained.json')
+parser.add_argument('--i', type=str, required=True)
 args = parser.parse_args()
 config = config_reader(args.config)
 
 DBL_EPSILON = 1E-22
+
+from pathlib import Path
+def mkdir(p):
+    if not p.exists():
+        p.mkdir()
+
 
 class param:
   def __init__(self, config):
@@ -42,7 +48,7 @@ class param:
     self.exp_folder = config['exp_name']
     self.ckpt = config['ckpt']
     
-    self.test = args.test
+    self.test = True
     self.gpu = config['gpu']
     self.num_of_gpus = len(self.gpu.split(","))
     self.num_of_input_points = config['num_of_input_points']
@@ -493,7 +499,7 @@ def write_visualization_results(predict_points, sampled_position_matrix, input_p
     if(per_point_radius is not None):
       np.savetxt(os.path.join(dir, 'predict_pc_{:06d}_{:04d}_radius.txt'.format(iter, i)),   per_point_radius[i])
 
-def inference_from_inputs():
+def inference_from_inputs(args):
   #placeholder for input pointcloud, should in shape [-1, 3]
   input_points = tf.placeholder(tf.float32)
   #convert input_points to octree
@@ -526,78 +532,43 @@ def inference_from_inputs():
     print("===========================")
     tf_restore_saver.restore(sess, ckpt)
         
-    if(True):
-      #forward single ShapeNet object
-      import plyfile
-      #inference
-      input_file = "examples/d0fa70e45dee680fa45b742ddc5add59.ply"
-      assert(os.path.exists(input_file))
-      plydata = plyfile.PlyData.read(input_file)
-      noisy_points = np.stack([plydata['vertex']['x'], plydata['vertex']['y'], plydata['vertex']['z']], axis=1)
+    from pathlib import Path
+    data_dir = Path(args.i)
+    input_dir = data_dir / 'pcd'
+    output_dir = data_dir / 'mls'
+    for p in tqdm.tqdm(list(input_dir.glob('**/*.npy'))):
+      output_dir = Path(str(p).replace('pcd', 'mls', 1)).parent
+      output_dir.mkdir(parents=True, exist_ok=True)
+      output_stem = p.stem
+      
+      # inference
+      noisy_points = np.load(p)
       assert(noisy_points.shape[1] == 3)
-      #first normalize noisy points to [-0.95, 0.95]
+      # first normalize noisy points to [-0.95, 0.95]
       scale = 0.95 / np.abs(noisy_points).max()
       noisy_points *= scale
       assert(noisy_points.min() >= -1 and noisy_points.max() <= 1)
-      mls_points_prediction = sess.run(mls_points, feed_dict={input_points:noisy_points})
+      mls_points_prediction = sess.run(
+          mls_points, feed_dict={input_points: noisy_points})
       assert(len(mls_points_prediction) == 3)
-      
+
       mls_points_geometry = mls_points_prediction[0]
       mls_points_radius = mls_points_prediction[2]
-      
-      mls_points_position = mls_points_geometry[:,:3]
-      mls_points_normal = mls_points_geometry[:,3:] / np.linalg.norm(mls_points_geometry[:,3:], axis=1, keepdims=True)
-      mls_points_geometry = np.concatenate([mls_points_position, mls_points_normal], axis=1)
-      
-      shape_scale = np.ones(1)*scale
-      np.savetxt(input_file+".xyz", mls_points_geometry, fmt="%0.6f")
-      np.savetxt(input_file+"_radius.txt", mls_points_radius, fmt="%0.6f")
-      np.savetxt(input_file+"_scale.txt", shape_scale)        
-      return
-    
-    #Shape Completion of ShapeNet:on ShapeNet 13 classes
-    import plyfile
-    if not os.path.exists(FLAGS.exp_folder):
-      os.mkdir(FLAGS.exp_folder)
-    test_output_dir = os.path.join(FLAGS.exp_folder, 'test')
-    if not os.path.exists(test_output_dir): os.makedirs(test_output_dir, exist_ok=True)
-    
-    #where input pointcloud lies
-    input_dir = "your_directory/convolutional_occupancy_networks-master/out/pointcloud/shapenet_3plane/generation_pretrained/input"    
-    categories = os.listdir(input_dir)
-    
-    for cat in categories:
-      cat_input_dir = os.path.join(input_dir, cat)
-      filelist = os.listdir(cat_input_dir)
-      cat_output_dir = os.path.join(test_output_dir, cat)
-      if(not os.path.exists(cat_output_dir)): os.mkdir(cat_output_dir)
-      for point_file in filelist:
-        if(not os.path.isdir(point_file) and point_file.endswith(".ply")):
-          sample_id = point_file.replace(".ply", "")
-          print("{}:{}".format(cat, point_file))
-          #do inference
-          plydata = plyfile.PlyData.read(os.path.join(cat_input_dir, point_file))
-          noisy_points = np.stack([plydata['vertex']['x'], plydata['vertex']['y'], plydata['vertex']['z']], axis=1)
-          assert(noisy_points.shape[1] == 3)
-          #first normalize noisy points to [-0.95, 0.95]
-          scale = 0.95 / np.abs(noisy_points).max()
-          noisy_points *= scale
-          assert(noisy_points.min() >= -1 and noisy_points.max() <= 1)
-          mls_points_prediction = sess.run(mls_points, feed_dict={input_points:noisy_points})
-          assert(len(mls_points_prediction) == 3)
-          
-          mls_points_geometry = mls_points_prediction[0]
-          mls_points_radius = mls_points_prediction[2]
-          
-          mls_points_position = mls_points_geometry[:,:3]
-          mls_points_normal = mls_points_geometry[:,3:] / np.linalg.norm(mls_points_geometry[:,3:], axis=1, keepdims=True)
-          mls_points_geometry = np.concatenate([mls_points_position, mls_points_normal], axis=1)
-          
-          shape_scale = np.ones(1)*scale
-          np.savetxt(os.path.join(cat_output_dir, sample_id+".xyz"), mls_points_geometry, fmt="%0.6f")
-          np.savetxt(os.path.join(cat_output_dir, sample_id+"_radius.txt"), mls_points_radius, fmt="%0.6f")
-          np.savetxt(os.path.join(cat_output_dir, sample_id+"_scale.txt"), shape_scale)            
 
+      mls_points_position = mls_points_geometry[:, :3]
+      mls_points_normal = mls_points_geometry[:, 3:] / np.linalg.norm(
+          mls_points_geometry[:, 3:], axis=1, keepdims=True)
+      mls_points_geometry = np.concatenate(
+          [mls_points_position, mls_points_normal], axis=1)
+
+      shape_scale = np.ones(1)*scale
+      np.savetxt(output_dir /
+                  f"{output_stem}.xyz", mls_points_geometry, fmt="%0.6f")
+      np.savetxt(output_dir /
+                  f"{output_stem}_radius.txt", mls_points_radius, fmt="%0.6f")
+      np.savetxt(output_dir /
+                  f"{output_stem}_scale.txt", shape_scale)
+          
 def training_pipeline():
   if not os.path.exists(FLAGS.exp_folder):
     os.mkdir(FLAGS.exp_folder)
@@ -687,7 +658,7 @@ def training_pipeline():
 
 def main():
   if(FLAGS.test):
-    return inference_from_inputs()
+    return inference_from_inputs(args)
   return training_pipeline()
 
 if __name__ == '__main__':
