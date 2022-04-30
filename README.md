@@ -2,8 +2,8 @@
 
 This repository contains the implementation of the paper:
 
-**Deep Implicit Moving Least-Squares Functions for 3D Reconstruction**  
-Shi-Lin Liu, Hao-Xiang Guo, [Hao Pan](https://haopan.github.io/), [Pengshuai Wang](https://wang-ps.github.io/), [Xin Tong](http://www.xtong.info/), [Yang Liu](https://xueyuhanlang.github.io/).  
+**Deep Implicit Moving Least-Squares Functions for 3D Reconstruction** [\[arXiv\]](https://arxiv.org/abs/2103.12266)  
+Shi-Lin Liu, [Hao-Xiang Guo](https://haoxiangguo.cn/), [Hao Pan](https://haopan.github.io/), [Pengshuai Wang](https://wang-ps.github.io/), [Xin Tong](http://www.xtong.info/), [Yang Liu](https://xueyuhanlang.github.io/).  
 
 <div style="text-align: center">
 <img src="media/teaser.png" width="1280"/>
@@ -16,6 +16,7 @@ If you find our code or paper useful, please consider citing
 @inproceedings{Liu2021MLS,
  author =  {Shi-Lin Liu, Hao-Xiang Guo, Hao Pan, Pengshuai Wang, Xin Tong, Yang Liu},
  title = {Deep Implicit Moving Least-Squares Functions for 3D Reconstruction},
+ booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
  year = {2021}}
  ```
 
@@ -28,9 +29,9 @@ You can create an anaconda environment called `deep_mls` using
 conda env create -f environment.yml
 conda activate deep_mls
 ```
-Next, we should compile the required customized tensorflow ops:  
+Next, a few customized tensorflow modules should be installed:  
 #### [O-CNN](https://github.com/microsoft/O-CNN) Module 
-For octree-based convolution module, please follow following steps to install:
+[O-CNN](https://github.com/microsoft/O-CNN) is an octree-based convolution module, please take the following steps to install:
 ```
 cd Octree && git clone https://github.com/microsoft/O-CNN/
 cd O-CNN/octree/external && git clone --recursive https://github.com/wang-ps/octree-ext.git
@@ -42,7 +43,7 @@ cp libocnn.so ../../../ocnn-tf/libs
 ```
 
 #### Efficient Neighbor Searching Ops
-In this work, intensive neighbor search ops should be conducted, we provide an efficient neighbor search module:
+Neighbor searching is intensively used in DeepMLS. For efficiency reasons, we provide several customized neighbor searching ops:
 ```
 cd points3d-tf/points3d
 bash build.sh
@@ -52,7 +53,8 @@ In this step, some errors like this may occur:
 tensorflow_core/include/tensorflow/core/util/gpu_kernel_helper.h:22:10: fatal error: third_party/gpus/cuda/include/cuda_fp16.h: No such file or directory
  #include "third_party/gpus/cuda/include/cuda_fp16.h"
 ```
-For solving this, please refer to [issue](https://github.com/tensorflow/tensorflow/issues/31349).  Basically, We need to edit the codes in tensorflow framework, please modify 
+For solving this, please refer to [issue](https://github.com/tensorflow/tensorflow/issues/31349).  
+Basically, We need to edit the codes in tensorflow framework, please modify 
 ``` C
 #include "third_party/gpus/cuda/include/cuda_fp16.h"
 ```
@@ -71,7 +73,7 @@ in "site-packages/tensorflow_core/include/tensorflow/core/util/gpu_device_functi
 #include "cuda.h"
 ```
 
-#### A Modified Marching Cubes Module
+#### Modified Marching Cubes Module
 We have modified the [PyMCubes](https://github.com/pmneila/PyMCubes) to get a more efficient marching cubes method for extract 0-isosurface defined by mls points.  
 To install:
 ```
@@ -80,26 +82,40 @@ cd PyMCubes && python setup.py install
 ```
 
 ## Datasets
-### ShapeNet
 
-### Preprocessed Dataset
-We have provided the processed tfrecords file. This can be used directly.
+### Preprocessed ShapeNet Dataset
+We have provided the processed tfrecords file. This can be used directly.  
+
+Our training data is **available** now! (total 130G+)  
+Please download all zip files for extraction.  
+[ShapeNet_points_all_train.zip.001](https://drive.google.com/file/d/1tP2y_lx8QIbxP9emRejpwQSkZ1x-MW5S/view?usp=sharing)  
+[ShapeNet_points_all_train.zip.002](https://drive.google.com/file/d/1NrgLarnDAgvZ0aipKGYXmgQHFK887-XM/view?usp=sharing)  
+[ShapeNet_points_all_train.zip.003](https://drive.google.com/file/d/1D49XjrkoH7ftuWKdXAKef1kRGRNxsU3I/view?usp=sharing)  
+After extraction, please modify the "train_data" field in experiment config json file with this tfrecords name.
+
+#### Update(20220228)
+Since the training data in google drive is down, we provide download links in baidu netdisk: 
+https://pan.baidu.com/s/1V70-VphJcN1fZaBdYNUN0g
+
+Please feel free to email freelin AT mail.ustc.edu.cn for access code.
+
 
 ### Build the Dataset
 If you want to build the dataset from your own data, please follow:  
 
 #### Step 1: Get Watertight Meshes
-To acquire a watertight version of ShapeNet, we first preprocess each mesh in ShapeNet. For each model in ShapeNet, we can get it's watertight version.
-To get this, please follow the [preprocess steps](https://github.com/autonomousvision/occupancy_networks#Building-the-dataset) of [Occupancy Networks](https://github.com/autonomousvision/occupancy_networks).
+To acquire a watertight mesh, we first preprocess each mesh follow the [preprocess steps](https://github.com/autonomousvision/occupancy_networks#Building-the-dataset) of [Occupancy Networks](https://github.com/autonomousvision/occupancy_networks).
 
 #### Step 2: Get the groundtruth sdf pair
-From step 1, we have already get the watertight version of each model. In this step, we utilize [OpenVDB](https://www.openvdb.org/) library to get the sdf values.   
+From step 1, we have already gotten the watertight version of each model. Then, we utilize [OpenVDB](https://www.openvdb.org/) library to get the sdf values and gradients for training.   
 For details, please refer to [here](vdb_tsdf).
+
+#### Update (2021-09-30): The script for generating training tfrecords is released, for details please refer to [Readme.md](https://github.com/Andy97/DeepMLS/tree/master/scripts). 
 
 ## Usage
 
 #### Inference using pre-trained model
-We have provided pretrained models and we can inference using these models:
+We have provided pretrained models which can be used to inference:
 ```
 #first download the pretrained models
 cd Pretrained && python download_models.py
@@ -108,16 +124,18 @@ cd .. && python DeepMLS_Generation.py Pretrained/Config_d7_1p_pretrained.json --
 ```
 
 The input for the inference is defined in [here](https://github.com/Andy97/DeepMLS/blob/master/DeepMLS_Generation.py#L533).  
-Your can replace it with other ply files in [examples](https://github.com/Andy97/DeepMLS/tree/master/examples) or your own data.
+Your can replace it with other point cloud files in [examples](https://github.com/Andy97/DeepMLS/tree/master/examples) or your own data.
 
 #### Extract Isosurface from MLS Points
-Now we have network predicted mls points as well as its' radius. Now we can perform marching cubes to extract the mesh.
+After inference, now we have network predicted mls points. The next step is to extract the surface:
 ```
-python mls_marching_cube.py --i examples/d0fa70e45dee680fa45b742ddc5add59.ply.xyz --o examples/d0fa70e45dee680fa45b742ddc5add59_mc.obj --scale
+python mls_marching_cubes.py --i examples/d0fa70e45dee680fa45b742ddc5add59.ply.xyz --o examples/d0fa70e45dee680fa45b742ddc5add59_mc.obj --scale
 ```
 
 #### Training
-Our code supports single and multiple gpu training. Please refer to the config json file.
+Our code supports single and multiple gpu training. For details, please refer to the config json file.  
 ```
 python DeepMLS_Generation.py examples/Config_g2_bs32_1p_d6.json
 ```
+#### Evaluation
+For evaluation of results, [ConvONet](https://github.com/autonomousvision/convolutional_occupancy_networks) has provided a great script. Please refer to [here](https://github.com/autonomousvision/convolutional_occupancy_networks#evaluation).
